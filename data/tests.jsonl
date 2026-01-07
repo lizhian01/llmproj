@@ -1,0 +1,5 @@
+{"id":"t1","text":"学校发布考试安排通知，强调携带证件并按时到场。","expect_topic":"教育","expect_sentiment":"中性"}
+{"id":"t2","text":"某公司发布新芯片，性能提升明显，市场反响积极。","expect_topic":"科技","expect_sentiment":"正面"}
+{"id":"t3","text":"天气恶劣导致航班大面积延误，旅客不满情绪上升。","expect_topic":"生活","expect_sentiment":"负面"}
+{"id":"t4","text":"多地出台政策支持消费，相关行业信心回升。","expect_topic":"财经","expect_sentiment":"正面"}
+{"id":"t5","text":"电影上映后口碑两极分化，讨论热度持续上升。","expect_topic":"娱乐","expect_sentiment":"中性"}
