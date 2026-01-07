@@ -28,31 +28,21 @@ def safe_json_loads(text: str) -> dict:
 
     raise ValueError("No valid JSON found")
 
+from app.prompt_loader import load_prompt, render_prompt
+# ... 你原来的 safe_json_loads 和 client 保持不变
+
 def process_text(text: str) -> dict:
+    tpl = load_prompt("extract_all.json.md")
+    prompt = render_prompt(tpl, TEXT=text)
+
     r = client.responses.create(
         model="gpt-4o-mini",
-        input=[
-            {"role": "developer", "content": "你是文本处理系统。只输出纯JSON，不要Markdown，不要解释。必须字段齐全。"},
-            {"role": "user", "content": (
-                "请对以下文本进行处理，并严格输出JSON，格式必须如下：\n"
-                "{\n"
-                "  \"summary_short\": \"<=40字一句话摘要\",\n"
-                "  \"summary_bullets\": [\"要点1\",\"要点2\",\"要点3\"],\n"
-                "  \"topic\": \"科技|教育|生活|财经|娱乐|其他\",\n"
-                "  \"sentiment\": \"正面|中性|负面\",\n"
-                "  \"keywords\": [\"关键词1\",\"关键词2\",\"关键词3\"],\n"
-                "  \"entities\": {\"time\": null, \"location\": null, \"people\": [], \"orgs\": []},\n"
-                "  \"rewrite_formal\": \"不新增事实的正式书面改写\"\n"
-                "}\n"
-                "要求：summary_bullets 必须刚好3条；keywords 刚好3个。\n\n"
-                f"文本：{text}"
-            )}
-        ],
+        input=prompt
     )
 
     obj = safe_json_loads(r.output_text)
 
-    # 兜底：保证字段齐全（真实落地必备）
+    # 兜底（你已有就保留）
     obj.setdefault("summary_short", "")
     obj.setdefault("summary_bullets", [])
     obj.setdefault("topic", "其他")
@@ -69,3 +59,4 @@ def process_text(text: str) -> dict:
     obj["entities"] = ent
 
     return obj
+
