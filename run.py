@@ -7,9 +7,9 @@ from app.pipeline import process_text
 
 
 def to_markdown_report(input_path: Path, source_text: str, result: dict) -> str:
-    """把 result.json 转成一份适合人阅读/截图展示的 Markdown 报告。"""
+    """把 result.json 转成一份适合展示的 Markdown 报告。"""
 
-    # 原文太长会影响展示，这里截断一下（你也可以改成更长）
+    
     preview_len = 800
     preview_text = source_text.strip()
     if len(preview_text) > preview_len:

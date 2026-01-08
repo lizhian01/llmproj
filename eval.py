@@ -4,7 +4,7 @@ from pathlib import Path
 from app.pipeline import process_text
 
 def call_with_retry(text: str, max_retry: int = 5):
-    # 固定退避：20~25秒左右（你的报错提示就是 20s）
+    # 固定退避：20~25秒左右
     delay = 22
     for i in range(max_retry):
         try:
@@ -12,7 +12,7 @@ def call_with_retry(text: str, max_retry: int = 5):
         except Exception as e:
             msg = str(e)
             if "Error code: 429" in msg or "rate_limit" in msg:
-                # 自动等待后继续（不需要你手动操作）
+                # 自动等待后继续
                 time.sleep(delay)
                 continue
             raise  # 其他错误直接抛出
