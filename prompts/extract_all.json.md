@@ -15,18 +15,18 @@
 请对以下文本进行处理，并严格按照如下 JSON 格式输出：
 
 {
-  "summary_short": "不超过40字的一句话摘要",
-  "summary_bullets": ["要点1","要点2","要点3"],
-  "topic": "科技|教育|生活|财经|娱乐|其他",
-  "sentiment": "正面|中性|负面",
-  "keywords": ["关键词1","关键词2","关键词3"],
+  "summary_short": "",
+  "summary_bullets": ["", "", ""],
+  "topic": "",
+  "sentiment": "",
+  "keywords": ["", "", ""],
   "entities": {
     "time": null,
     "location": null,
     "people": [],
     "orgs": []
   },
-  "rewrite_formal": "在不新增事实的前提下，对原文进行正式书面改写"
+  "rewrite_formal": ""
 }
 
 【硬性要求】
@@ -35,6 +35,7 @@
 - 不得编造原文中不存在的信息
 - entities 中若无对应信息，请使用 null 或空数组
 - 输出内容必须是合法 JSON，程序将直接解析
+- rewrite_formal 字段必须直接包含对原文的正式书面改写文本（不得新增事实或把提示说明作为字段值）
 
 待处理文本如下：
 {{TEXT}}
