@@ -1,7 +1,13 @@
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from client import get_client
 client = get_client()
 
-text = ("　据了解，特勤局招聘需经过多轮面试、详尽的背景审查以及淘汰率极高的测谎，即便以联邦政府的标准来看，这套流程也堪称严苛。更关键的是，现有外勤办公室本身人手紧张，难以支撑如此大规模的招聘工作。")
+text = ("　据了解，特勤局招聘需经过多轮面试、详尽的背景审查以及淘汰率极高的测谎，\
+        即便以联邦政府的标准来看，这套流程也堪称严苛。更关键的是，现有外勤办公室本身人手紧张，\
+        难以支撑如此大规模的招聘工作。")
 
 r1 = client.responses.create(
     model="gpt-4o-mini",
