@@ -1,9 +1,35 @@
-# secrets
+# 一、敏感信息 / 密钥配置
+# 本地环境变量，包含 API Key、密钥等
+# 永远不要提交到 Git 仓库
 .env
 
-# python cache
+# 二、Python 运行缓存文件
+# Python 自动生成的缓存目录
 __pycache__/
+
+# Python 编译生成的字节码文件
 *.pyc
 
-# IDE
+
+# 三、IDE / 编辑器配置文件
+# PyCharm / IntelliJ IDEA 配置
 .idea/
+
+# VS Code 本地配置（与个人环境强相关）
+.vscode/
+
+
+# 四、本地实验 / 调试文件
+# AI Agent / 实验过程说明文件（非最终成果）
+AGENTS.md
+
+# 本地测试用 Notebook（反复运行、结果不稳定）
+llmproj_test.ipynb
+
+# 五、RAG 运行过程中生成的中间产物
+# 文档切分结果，由程序自动生成，可重复生成
+data/chunks.json
+
+# 向量索引与 embedding 结果目录
+# 每次构建可能不同，体积较大，不应入库
+data/index/
