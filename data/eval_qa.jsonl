@@ -1,0 +1,11 @@
+﻿{"question": "一线城市住宿标准是多少？", "expected_keywords": ["600"], "expected_doc": "company_policy.md"}
+{"question": "餐补标准是多少？", "expected_keywords": ["80"], "expected_doc": "company_policy.md"}
+{"question": "报销需要在多少天内提交？", "expected_keywords": ["30"], "expected_doc": "company_policy.md"}
+{"question": "产品 Alpha 正式发布日期是什么时候？", "expected_keywords": ["2025-02-01"], "expected_doc": "product_alpha.txt"}
+{"question": "产品 Alpha 支持哪些文件格式？", "expected_keywords": ["txt", "md"], "expected_doc": "product_alpha.txt"}
+{"question": "工作时间是几点到几点？", "expected_keywords": ["09:30", "18:30"], "expected_doc": "handbook.md"}
+{"question": "每周最多可以远程办公几天？", "expected_keywords": ["2"], "expected_doc": "handbook.md"}
+{"question": "事故恢复时间是几点？", "expected_keywords": ["14:35"], "expected_doc": "ops_notes.txt"}
+{"question": "事故的主要原因是什么？", "expected_keywords": ["数据库主从延迟"], "expected_doc": "ops_notes.txt"}
+{"question": "公司今年计划上市吗？", "should_refuse": true}
+{"question": "公司总部在哪个城市？", "should_refuse": true}
