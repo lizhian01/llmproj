@@ -57,12 +57,13 @@ def split_sections(text: str) -> List[str]:
         buf = []
 
     for line in lines:
-        if not line.strip():
-            flush()
-            continue
         if line.lstrip().startswith("#"):
             flush()
             buf.append(line)
+            continue
+        if not line.strip():
+            if buf and buf[-1] != "":
+                buf.append("")
             continue
         buf.append(line)
 
