@@ -1,221 +1,190 @@
-# 操作文档（operate.md）
+# 完整操作文档（operate.md）
 
-本文档面向第一次接触本项目的使用者，说明如何搭建、启动与运行本项目，并给出完整的操作示例与注意事项。
+本文档按“从零到可联调”的顺序说明 llmproj 的完整使用方法。
 
-## 1. 项目简介
+## 1. 目标与范围
+- 提供文本处理能力（摘要、分类、实体、改写）。
+- 提供本地知识库 RAG 能力（上传、建库、问答、拒答）。
+- 同时支持 CLI 与 Web（FastAPI + Vite React）。
 
-本项目是一个基于大语言模型（LLM）的中文文本处理辅助系统，提供：
-- 文本摘要与要点提取
-- 主题/情绪分类
-- 关键词与实体抽取
-- 正式书面改写
-- 本地知识库问答（RAG：检索增强生成）
-
-项目包含两条主线：
-1) **文本处理主流程**：输入一段文本，输出结构化结果与可读报告。  
-2) **本地知识库问答（RAG）**：对本地文档建立索引，支持基于证据的问答与拒答。
-
----
-
-## 2. 环境要求
-
+## 2. 前置条件
 - Python 3.9+
-- 操作系统：Windows / macOS / Linux 均可(本人用的Windows11专业版系统)
-- 需要网络访问 OpenAI API（其他模型API也可，以下替换即可）
-- `.env` 中配置 `OPENAI_API_KEY`
+- Node.js 18+
+- 能访问模型 API
+- 在项目根目录具备 `.env`
 
----
+## 3. 环境配置
 
-## 3. 功能概述
-
-### 3.1 文本处理辅助系统
-- 一句话摘要
-- 3 条要点列表
-- 主题与情绪分类
-- 关键词与实体抽取（时间/地点/人物/组织）
-- 正式书面改写
-- 结构化 JSON 输出 + Markdown 报告
-
-### 3.2 本地知识库问答（RAG）
-流程：文档切分 → 向量化索引 → 相似度检索 → 证据驱动回答
-- 支持导入本地 `.md/.txt` 目录
-- 支持阈值拒答（证据不足时不回答）
-- 返回引用信息（来源文件、chunk_id、片段预览）
-
----
-
-## 4. 依赖安装
-
-在项目根目录执行：
-
-```bash
-python -m pip install -r requirements.txt
-```
-
----
-
-## 5. 目录结构（关键部分）
-
-```
-.
-├─ app/                 # 核心逻辑
-│  ├─ pipeline.py       # 文本处理主流程（LLM 调用 + JSON 解析）
-│  ├─ schemas.py        # 数据结构定义
-│  ├─ prompt_loader.py  # prompt 读取与渲染
-│  └─ rag.py            # RAG 相关逻辑（切分/索引/检索/回答）
-├─ prompts/             # prompt 模板
-│  ├─ extract_all.json.md
-│  └─ rag_answer.md
-├─ data/                # 示例输入/输出/索引
-│  ├─ sample.txt
-│  ├─ sample.result.json
-│  ├─ sample.report.md
-│  ├─ kb/               # 本地知识库示例文件
-│  └─ index/            # 向量索引输出
-├─ run.py               # 文本处理入口
-├─ qa.py                # RAG 命令行入口
-├─ eval.py              # 文本处理评测脚本
-├─ eval_qa.py           # RAG 评测脚本
-├─ client.py            # OpenAI 客户端初始化
-├─ config.py            # 环境变量加载
-└─ requirements.txt     # 依赖列表
-```
-
----
-
-## 6. 核心文件说明（简要）
-
-- `run.py`：文本处理入口脚本（读取输入文本 → 调用 `app/pipeline.py` → 输出 JSON + 报告）
-- `app/pipeline.py`：文本处理主逻辑（加载 prompt、调用模型、解析并补全字段）
-- `qa.py`：RAG 命令行入口（建库 / 问答）
-- `app/rag.py`：RAG 核心逻辑（切分、嵌入、索引、检索、证据拼接、回答）
-- `prompts/extract_all.json.md`：文本处理 prompt 模板
-- `prompts/rag_answer.md`：RAG 回答 prompt 模板
-
----
-
-## 7. 配置与初始化
-
-在项目根目录创建或修改 `.env`：
+### 3.1 配置 `.env`
+在项目根目录创建：
 
 ```env
-OPENAI_API_KEY=你的key
+OPENAI_API_KEY=your_key
 ```
 
 可选：
+
 ```env
 OPENAI_TIMEOUT=60
 OPENAI_MAX_RETRIES=5
 OPENAI_PROXY=http://127.0.0.1:7890
 ```
 
----
+### 3.2 安装 Python 依赖
+```bash
+python -m pip install -r requirements.txt
+```
 
-## 8. 操作步骤（完整流程）
+### 3.3 安装前端依赖
+```bash
+cd web
+npm install
+cd ..
+```
 
-### 8.1 文本处理（主流程）
+## 4. 启动服务
 
-1) 准备输入文本  
-将文本放在 `data/sample.txt`（或任意路径文件）
+### 4.1 启动后端（终端 A）
+必须在项目根目录执行：
 
-2) 执行
+```bash
+uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+说明：如果在 `web/` 目录执行，通常会出现 `No module named 'server'`。
+
+### 4.2 启动前端（终端 B）
+```bash
+cd web
+npm run dev
+```
+
+默认访问：`http://localhost:5173`
+
+如需自定义后端地址：
+```bash
+# Windows PowerShell
+$env:VITE_API_BASE="http://localhost:8000"
+npm run dev
+```
+
+## 5. Web 端操作流程
+
+## 5.1 TextLab
+1. 打开 `TextLab` 页面。
+2. 粘贴文本，或上传 `.txt/.md` 文件。
+3. 点击“开始处理”。
+4. 查看右侧卡片结果。
+5. 在下方切换 `JSON` / `Markdown` Tab。
+6. 可使用“复制当前视图”按钮。
+
+## 5.2 RAGLab
+1. 在 KB 管理区上传知识库文件。
+2. 选择目标 KB，点击“开始建库”。
+3. 在问答区输入问题，设置 `TopK` 与 `Threshold`。
+4. 点击“发起问答”。
+5. 查看：
+- `answer`
+- `refused` 状态
+- `top_score / threshold` 进度条
+- `citations` 折叠列表
+
+## 6. API 联调流程（推荐）
+
+### 6.1 上传 KB
+```bash
+curl -X POST "http://localhost:8000/api/kb/upload" \
+  -F "files=@data/kb/company_policy.md" \
+  -F "kb_name=policy"
+```
+
+记录返回的 `kb_id`。
+
+### 6.2 建索引
+```bash
+curl -X POST "http://localhost:8000/api/kb/<kb_id>/index"
+```
+
+### 6.3 发起问答
+```bash
+curl -X POST "http://localhost:8000/api/rag/ask" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "kb_id":"<kb_id>",
+    "question":"udp特点是什么",
+    "topk":5,
+    "threshold":0.35
+  }'
+```
+
+### 6.4 文本处理
+```bash
+curl -X POST "http://localhost:8000/api/text/process" \
+  -H "Content-Type: application/json" \
+  -d '{"text":"在这里放待处理文本"}'
+```
+
+## 7. CLI 操作流程
+
+### 7.1 文本处理
 ```bash
 python run.py data/sample.txt
 ```
+输出：
+- `data/sample.result.json`
+- `data/sample.report.md`
 
-3) 查看输出  
-- `data/sample.result.json`：结构化结果  
-- `data/sample.report.md`：可读性报告
-
----
-
-### 8.2 本地知识库问答（RAG）
-
-#### (1) 建库 / 建索引
-
-（这里消耗token很多）
-
-将知识库文件放到目录（示例：`data/kb/`），支持 `.md` / `.txt`。
-
-执行：
+### 7.2 RAG 建库
 ```bash
 python qa.py index --kb data/kb
 ```
 
-索引输出：
-- `data/index/embeddings.jsonl`
-- `data/chunks.json`
-
-#### (2) 进行问答
+### 7.3 RAG 问答
 ```bash
-python qa.py ask --question "产品 Alpha 正式发布日期是什么时候？" --topk 5 --threshold 0.35
+python qa.py ask --question "udp特点是什么" --topk 5 --threshold 0.35
 ```
 
-输出包含：
-- `answer`：回答内容  
-- `citations`：引用列表（source_file/chunk_id/preview）
-- `refused`：是否拒答
+## 8. 数据落盘说明
 
-#### (3) 评测（可选）
-```bash
-python eval_qa.py --kb data/kb
-```
+### 8.1 Web 模式（多 KB）
+- 上传原文：`data/kbs/{kb_id}/raw/`
+- 索引目录：`data/kbs/{kb_id}/index/`
+- chunk 文件：`data/kbs/{kb_id}/chunks.json`
+- 元信息：`data/kbs/manifest.json`
 
----
+### 8.2 CLI 默认路径
+- 索引目录：`data/index/`
+- chunk 文件：`data/chunks.json`
 
-## 9. 示例
+## 9. 参数建议
+- `topk`：默认 `5`，可按知识库规模调整。
+- `threshold`：默认 `0.35`。
+- 若问答经常拒答，可先确认 `top_score`，再评估是否降低阈值。
+- 改动知识库文件或切分策略后，必须重建索引。
 
-### 示例 1：文本处理
-```bash
-python run.py data/sample.txt
-```
+## 10. 常见问题排查
 
-输出（简化）：
-```json
-{
-  "summary_short": "...",
-  "summary_bullets": ["...", "...", "..."],
-  "topic": "科技",
-  "sentiment": "正面",
-  "keywords": ["...", "..."],
-  "entities": {"time": null, "location": null, "people": [], "orgs": []},
-  "rewrite_formal": "..."
-}
-```
+### 10.1 `No module named 'server'`
+原因：后端在错误目录启动。
+解决：回到项目根目录执行 `uvicorn server.main:app ...`。
 
-### 示例 2：RAG 问答
-```bash
-python qa.py ask --question "餐补标准是多少？" --topk 5 --threshold 0.35
-```
+### 10.2 RAG 返回“证据不足”
+排查顺序：
+1. 是否用对了 `kb_id`。
+2. 上传后是否重新建索引。
+3. 返回中 `reason` 是否为 `below_threshold`。
+4. 查看 `top_score` 与 `threshold` 差距。
 
-输出（简化）：
-```json
-{
-  "question": "餐补标准是多少？",
-  "refused": false,
-  "answer": "……",
-  "top_score": 0.42,
-  "threshold": 0.35,
-  "citations": [
-    {
-      "source_file": "company_policy.md",
-      "chunk_id": "chunk_000003",
-      "chunk_preview": "……"
-    }
-  ]
-}
-```
+### 10.3 前端请求失败
+- 后端是否启动在 `http://localhost:8000`。
+- 前端是否指向正确 `VITE_API_BASE`。
+- 浏览器控制台是否有跨域或 4xx/5xx 报错。
 
----
+### 10.4 上传成功但无法建库
+- 确认上传的是 `.txt/.md`。
+- 检查 `data/kbs/{kb_id}/raw/` 是否有文件。
 
-## 10. 常见问题（FAQ）
-
-1) **索引与问答为什么找不到答案？**  
-请检查是否已建立索引、`kb` 目录是否有文档、以及问答的 `threshold` 是否过高。
-
-2) **能否更换模型？**  
-可以。`qa.py` 的 `--embedding-model` 与 `--model` 支持传入其他模型。
-
-3) **为什么报错 Missing required env var?**  
-说明 `.env` 未配置 `OPENAI_API_KEY` 或环境变量未生效。
-
+## 11. 日常维护建议
+- 先改 `app/` 算法，再在 `server/services/` 封装业务，再补前端交互。
+- 每次改 API 字段，请同步更新 `README.md`、`operate.md`。
+- 定期清理 `data/kbs/` 旧索引，避免无效占用。
