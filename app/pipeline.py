@@ -2,8 +2,6 @@ import json
 import re
 from client import get_client
 
-client = get_client()
-
 def safe_json_loads(text: str) -> dict:
     if text is None:
         raise ValueError("Model output is None")
@@ -32,6 +30,7 @@ from app.prompt_loader import load_prompt, render_prompt
 # ... 你原来的 safe_json_loads 和 client 保持不变
 
 def process_text(text: str) -> dict:
+    client = get_client()
     tpl = load_prompt("extract_all.json.md")
     prompt = render_prompt(tpl, TEXT=text)
 
@@ -59,4 +58,3 @@ def process_text(text: str) -> dict:
     obj["entities"] = ent
 
     return obj
-
