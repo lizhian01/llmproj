@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Copy, FileUp, Loader2, Sparkles } from "lucide-react";
+import { Copy, Download, FileUp, Loader2, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
 
@@ -115,6 +115,31 @@ export default function TextLab() {
     }
   }
 
+  function handleDownload() {
+    if (!result) {
+      toast.error("暂无可下载内容");
+      return;
+    }
+
+    const isJson = tab === "json";
+    const payload = isJson ? jsonView : reportMarkdown;
+    const filename = isJson
+      ? `textlab-result-${Date.now()}.json`
+      : `textlab-report-${Date.now()}.md`;
+    const mimeType = isJson ? "application/json;charset=utf-8" : "text/markdown;charset=utf-8";
+
+    const blob = new Blob([payload], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success(isJson ? "JSON 已下载" : "Markdown 已下载");
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
@@ -150,7 +175,7 @@ export default function TextLab() {
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {metrics.map((item) => (
               <Card key={item.label}>
@@ -171,7 +196,7 @@ export default function TextLab() {
                   <CardDescription>摘要</CardDescription>
                   <CardTitle className="text-sm font-medium">一句话总结</CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm leading-6 text-muted-foreground">
+                <CardContent className="break-words text-sm leading-6 text-muted-foreground">
                   {result?.summary_short || "暂无结果"}
                 </CardContent>
               </Card>
@@ -243,7 +268,7 @@ export default function TextLab() {
                   <CardDescription>改写</CardDescription>
                   <CardTitle className="text-sm font-medium">Formal Rewrite</CardTitle>
                 </CardHeader>
-                <CardContent className="text-sm leading-6 text-muted-foreground">
+                <CardContent className="break-words text-sm leading-6 text-muted-foreground">
                   {result?.rewrite_formal || "暂无结果"}
                 </CardContent>
               </Card>
@@ -252,17 +277,23 @@ export default function TextLab() {
         </div>
       </div>
 
-      <Card>
+      <Card className="min-w-0">
         <CardHeader className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <CardTitle className="text-base">结果视图</CardTitle>
               <CardDescription>支持 JSON 与 Markdown 两种格式。</CardDescription>
             </div>
-            <Button variant="outline" size="sm" onClick={handleCopy}>
-              <Copy className="h-4 w-4" />
-              复制当前视图
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleCopy}>
+                <Copy className="h-4 w-4" />
+                复制当前视图
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleDownload}>
+                <Download className="h-4 w-4" />
+                下载当前视图
+              </Button>
+            </div>
           </div>
           <Separator />
         </CardHeader>
@@ -273,7 +304,7 @@ export default function TextLab() {
               <TabsTrigger value="markdown">Markdown</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="json">
+            <TabsContent value="json" className="min-w-0">
               {loading ? (
                 <div className="space-y-2">
                   <Skeleton className="h-4 w-full" />
@@ -281,13 +312,13 @@ export default function TextLab() {
                   <Skeleton className="h-4 w-4/6" />
                 </div>
               ) : (
-                <pre className="mono max-h-[420px] overflow-auto rounded-md border bg-muted/30 p-4 text-xs leading-6">
+                <pre className="mono max-h-[420px] overflow-y-auto overflow-x-hidden whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-4 text-xs leading-6">
                   {jsonView || "暂无数据"}
                 </pre>
               )}
             </TabsContent>
 
-            <TabsContent value="markdown">
+            <TabsContent value="markdown" className="min-w-0">
               {loading ? (
                 <div className="space-y-2">
                   <Skeleton className="h-4 w-full" />
@@ -295,15 +326,26 @@ export default function TextLab() {
                   <Skeleton className="h-4 w-4/6" />
                 </div>
               ) : (
-                <div className="max-h-[420px] overflow-auto rounded-md border bg-muted/20 p-4 text-sm leading-7">
+                <div className="min-w-0 max-h-[420px] overflow-y-auto overflow-x-hidden rounded-md border bg-muted/20 p-4 text-sm leading-7 [overflow-wrap:anywhere]">
                   {reportMarkdown ? (
                     <ReactMarkdown
                       components={{
-                        h1: ({ ...props }) => <h1 className="mb-3 text-lg font-semibold" {...props} />,
-                        h2: ({ ...props }) => <h2 className="mb-2 mt-4 text-base font-semibold" {...props} />, 
-                        p: ({ ...props }) => <p className="mb-2" {...props} />, 
-                        li: ({ ...props }) => <li className="mb-1" {...props} />, 
-                        code: ({ ...props }) => <code className="mono rounded bg-muted px-1.5 py-0.5 text-xs" {...props} />
+                        h1: ({ ...props }) => <h1 className="mb-3 break-words text-lg font-semibold" {...props} />,
+                        h2: ({ ...props }) => <h2 className="mb-2 mt-4 break-words text-base font-semibold" {...props} />,
+                        p: ({ ...props }) => <p className="mb-2 break-words" {...props} />,
+                        li: ({ ...props }) => <li className="mb-1 break-words" {...props} />,
+                        pre: ({ ...props }) => (
+                          <pre
+                            className="mono my-2 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded bg-muted/30 p-3 text-xs leading-6"
+                            {...props}
+                          />
+                        ),
+                        code: ({ inline, ...props }) =>
+                          inline ? (
+                            <code className="mono rounded bg-muted px-1.5 py-0.5 text-xs break-all" {...props} />
+                          ) : (
+                            <code className="mono whitespace-pre-wrap break-all" {...props} />
+                          )
                       }}
                     >
                       {reportMarkdown}
