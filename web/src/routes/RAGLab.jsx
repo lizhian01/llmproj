@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, Copy, Database, Loader2, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,6 +17,17 @@ import { fetchJson } from "../lib/api.js";
 
 const selectClassName =
   "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+const HISTORY_STATUS = {
+  success: { label: "Success", variant: "secondary" },
+  refused: { label: "Refused", variant: "outline" },
+  error: { label: "Error", variant: "destructive" }
+};
+
+function formatTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
 
 function AskResultSkeleton() {
   return (
@@ -46,6 +57,12 @@ export default function RAGLab() {
   const [result, setResult] = useState(null);
   const [status, setStatus] = useState("");
   const [lastError, setLastError] = useState("");
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyDetail, setHistoryDetail] = useState(null);
+  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
+  const [selectedHistoryId, setSelectedHistoryId] = useState("");
+  const [historyError, setHistoryError] = useState("");
 
   const loadKbs = useCallback(async (silent = false) => {
     try {
@@ -70,6 +87,54 @@ export default function RAGLab() {
   useEffect(() => {
     loadKbs();
   }, [loadKbs]);
+
+  const loadHistory = useCallback(async (silent = false) => {
+    setHistoryLoading(true);
+    if (!silent) setHistoryError("");
+    try {
+      const data = await fetchJson("/api/rag/history?limit=50");
+      const items = data.items || [];
+      setHistoryItems(items);
+      return items;
+    } catch (error) {
+      if (!silent) {
+        const message = error.message || "加载历史记录失败";
+        setHistoryError(message);
+        toast.error(message);
+      }
+      return [];
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const loadHistoryDetail = useCallback(async (historyId) => {
+    if (!historyId) return;
+    setSelectedHistoryId(historyId);
+    setHistoryDetailLoading(true);
+    try {
+      const data = await fetchJson(`/api/rag/history/${historyId}`);
+      setHistoryDetail(data);
+    } catch (error) {
+      const message = error.message || "获取详情失败";
+      toast.error(message);
+    } finally {
+      setHistoryDetailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const items = await loadHistory(true);
+      if (mounted && items.length) {
+        await loadHistoryDetail(items[0].id);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [loadHistory, loadHistoryDetail]);
 
   const activeKb = selectedKb;
   const activeKbMeta = useMemo(
@@ -194,6 +259,10 @@ export default function RAGLab() {
       toast.error(message);
     } finally {
       setAsking(false);
+    }
+    const items = await loadHistory(true);
+    if (items.length) {
+      await loadHistoryDetail(items[0].id);
     }
   }
 
@@ -480,6 +549,151 @@ export default function RAGLab() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle className="text-base">历史记录</CardTitle>
+          <CardDescription>最近问答记录与检索详情。</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 xl:grid-cols-[360px_1fr]">
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>时间</TableHead>
+                  <TableHead>问题摘要</TableHead>
+                  <TableHead className="w-24">状态</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {historyLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-6">
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ) : historyItems.length ? (
+                  historyItems.map((item) => {
+                    const meta = HISTORY_STATUS[item.status] || {
+                      label: item.status || "Unknown",
+                      variant: "outline"
+                    };
+                    return (
+                      <TableRow
+                        key={item.id}
+                        data-state={selectedHistoryId === item.id ? "selected" : undefined}
+                        onClick={() => loadHistoryDetail(item.id)}
+                      >
+                        <TableCell className="text-xs text-muted-foreground">
+                          {formatTime(item.created_at)}
+                        </TableCell>
+                        <TableCell className="max-w-[220px] truncate">{item.question_preview || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={meta.variant}>{meta.label}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-6 text-center text-sm text-muted-foreground">
+                      暂无记录
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {historyError ? (
+              <div className="border-t px-3 py-2 text-xs text-destructive">{historyError}</div>
+            ) : null}
+          </div>
+
+          <div className="space-y-3">
+            {historyDetailLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : historyDetail ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={(HISTORY_STATUS[historyDetail.status] || {}).variant || "outline"}>
+                    {(HISTORY_STATUS[historyDetail.status] || {}).label || historyDetail.status || "Unknown"}
+                  </Badge>
+                  {historyDetail.refused ? <Badge variant="outline">Refused</Badge> : null}
+                  {historyDetail.reason ? <Badge variant="outline">原因: {historyDetail.reason}</Badge> : null}
+                </div>
+
+                <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div>KB: {historyDetail.kb_id || "-"}</div>
+                  <div>耗时: {historyDetail.duration_ms ?? "-"} ms</div>
+                  <div>TopK: {historyDetail.topk ?? "-"}</div>
+                  <div>Threshold: {historyDetail.threshold ?? "-"}</div>
+                  <div>Top Score: {historyDetail.top_score ?? "-"}</div>
+                  <div>Model: {historyDetail.model || "-"}</div>
+                  <div>Embedding: {historyDetail.embedding_model || "-"}</div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">问题</div>
+                  <pre className="mono max-h-[160px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/20 p-3 text-xs leading-6">
+                    {historyDetail.question || "-"}
+                  </pre>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">答案</div>
+                  <pre className="mono max-h-[200px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/20 p-3 text-xs leading-6">
+                    {historyDetail.answer || "暂无答案"}
+                  </pre>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-sm font-medium">引用证据 ({historyDetail.citations?.length || 0})</div>
+                  {historyDetail.citations?.length ? (
+                    <Accordion type="single" collapsible className="w-full rounded-md border px-3">
+                      {historyDetail.citations.map((citation, index) => (
+                        <AccordionItem key={`${citation.chunk_id || index}`} value={`history-cite-${index}`}>
+                          <AccordionTrigger className="py-2 hover:no-underline">
+                            <div className="flex w-full items-center justify-between pr-3 text-left">
+                              <span className="max-w-[320px] truncate text-sm">{citation.source_file}</span>
+                              <span className="mono text-xs text-muted-foreground">
+                                score {Number(citation.score || 0).toFixed(4)}
+                              </span>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="rounded-sm bg-muted/30 p-3 text-xs leading-6 text-muted-foreground">
+                              {citation.chunk_preview || "(empty)"}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">暂无引用证据</div>
+                  )}
+                </div>
+
+                {historyDetail.error_message ? (
+                  <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs">
+                    <div className="font-medium text-destructive">错误信息</div>
+                    <div className="text-destructive">{historyDetail.error_message}</div>
+                    {historyDetail.error_trace ? (
+                      <pre className="mono max-h-[160px] overflow-y-auto whitespace-pre-wrap text-[11px] text-destructive/80">
+                        {historyDetail.error_trace}
+                      </pre>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">请选择一条记录查看详情</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy, Download, FileUp, Loader2, Sparkles } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { toast } from "sonner";
@@ -10,12 +10,24 @@ import { Input } from "../components/ui/input.jsx";
 import { Label } from "../components/ui/label.jsx";
 import { Separator } from "../components/ui/separator.jsx";
 import { Skeleton } from "../components/ui/skeleton.jsx";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table.jsx";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs.jsx";
 import { Textarea } from "../components/ui/textarea.jsx";
 import { fetchJson } from "../lib/api.js";
 import { buildReportMarkdown } from "../lib/report.js";
 
 const EMPTY_ENTITIES = { time: null, location: null, people: [], orgs: [] };
+const HISTORY_STATUS = {
+  success: { label: "Success", variant: "secondary" },
+  error: { label: "Error", variant: "destructive" },
+  refused: { label: "Refused", variant: "outline" }
+};
+
+function formatTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
 
 function OutputSkeleton() {
   return (
@@ -38,6 +50,12 @@ export default function TextLab() {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("json");
+  const [historyItems, setHistoryItems] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyDetail, setHistoryDetail] = useState(null);
+  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
+  const [selectedHistoryId, setSelectedHistoryId] = useState("");
+  const [historyError, setHistoryError] = useState("");
 
   const entities = result?.entities || EMPTY_ENTITIES;
 
@@ -59,10 +77,75 @@ export default function TextLab() {
     return [
       { label: "文本长度", value: charCount },
       { label: "要点数", value: bullets },
-      { label: "关键词", value: keywords },
+      { label: "关键词数", value: keywords },
       { label: "实体数", value: entityCount }
     ];
   }, [entities, result, text]);
+
+  const historyOutput = useMemo(() => {
+    if (!historyDetail?.output_json) return "";
+    const raw = historyDetail.output_json;
+    if (typeof raw === "string") {
+      try {
+        return JSON.stringify(JSON.parse(raw), null, 2);
+      } catch (error) {
+        return raw;
+      }
+    }
+    try {
+      return JSON.stringify(raw, null, 2);
+    } catch (error) {
+      return String(raw);
+    }
+  }, [historyDetail]);
+
+  const loadHistory = useCallback(async (silent = false) => {
+    setHistoryLoading(true);
+    if (!silent) setHistoryError("");
+    try {
+      const data = await fetchJson("/api/text/history?limit=50");
+      const items = data.items || [];
+      setHistoryItems(items);
+      return items;
+    } catch (error) {
+      if (!silent) {
+        const message = error.message || "加载历史记录失败";
+        setHistoryError(message);
+        toast.error(message);
+      }
+      return [];
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const loadHistoryDetail = useCallback(async (historyId) => {
+    if (!historyId) return;
+    setSelectedHistoryId(historyId);
+    setHistoryDetailLoading(true);
+    try {
+      const data = await fetchJson(`/api/text/history/${historyId}`);
+      setHistoryDetail(data);
+    } catch (error) {
+      const message = error.message || "获取详情失败";
+      toast.error(message);
+    } finally {
+      setHistoryDetailLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const items = await loadHistory(true);
+      if (mounted && items.length) {
+        await loadHistoryDetail(items[0].id);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [loadHistory, loadHistoryDetail]);
 
   async function handleProcess() {
     if (!text.trim()) {
@@ -83,6 +166,10 @@ export default function TextLab() {
     } finally {
       setLoading(false);
     }
+    const items = await loadHistory(true);
+    if (items.length) {
+      await loadHistoryDetail(items[0].id);
+    }
   }
 
   async function handleFileUpload(event) {
@@ -92,7 +179,7 @@ export default function TextLab() {
     try {
       const fileText = await file.text();
       setText(fileText);
-      toast.success(`已载入 ${file.name}`);
+      toast.success(`已加载 ${file.name}`);
     } catch (error) {
       toast.error("读取文件失败");
     } finally {
@@ -357,6 +444,121 @@ export default function TextLab() {
               )}
             </TabsContent>
           </Tabs>
+        </CardContent>
+      </Card>
+
+      <Card className="min-w-0">
+        <CardHeader>
+          <CardTitle className="text-base">历史记录</CardTitle>
+          <CardDescription>查看最近的生成记录与详情。</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 xl:grid-cols-[360px_1fr]">
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>时间</TableHead>
+                  <TableHead>输入摘要</TableHead>
+                  <TableHead className="w-24">状态</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {historyLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-6">
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  </TableRow>
+                ) : historyItems.length ? (
+                  historyItems.map((item) => {
+                    const meta = HISTORY_STATUS[item.status] || {
+                      label: item.status || "Unknown",
+                      variant: "outline"
+                    };
+                    return (
+                      <TableRow
+                        key={item.id}
+                        data-state={selectedHistoryId === item.id ? "selected" : undefined}
+                        onClick={() => loadHistoryDetail(item.id)}
+                      >
+                        <TableCell className="text-xs text-muted-foreground">
+                          {formatTime(item.created_at)}
+                        </TableCell>
+                        <TableCell className="max-w-[220px] truncate">{item.input_preview || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={meta.variant}>{meta.label}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={3} className="py-6 text-center text-sm text-muted-foreground">
+                      暂无记录
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            {historyError ? (
+              <div className="border-t px-3 py-2 text-xs text-destructive">{historyError}</div>
+            ) : null}
+          </div>
+
+          <div className="space-y-3">
+            {historyDetailLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-5/6" />
+              </div>
+            ) : historyDetail ? (
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={(HISTORY_STATUS[historyDetail.status] || {}).variant || "outline"}>
+                    {(HISTORY_STATUS[historyDetail.status] || {}).label || historyDetail.status || "Unknown"}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    耗时 {historyDetail.duration_ms ?? "-"} ms
+                  </span>
+                </div>
+
+                {historyDetail.summary_short ? (
+                  <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                    {historyDetail.summary_short}
+                  </div>
+                ) : null}
+
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">输入</div>
+                  <pre className="mono max-h-[180px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/20 p-3 text-xs leading-6">
+                    {historyDetail.input_text || "-"}
+                  </pre>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground">输出 JSON</div>
+                  <pre className="mono max-h-[220px] overflow-y-auto whitespace-pre-wrap rounded-md border bg-muted/20 p-3 text-xs leading-6">
+                    {historyOutput || "暂无输出"}
+                  </pre>
+                </div>
+
+                {historyDetail.error_message ? (
+                  <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs">
+                    <div className="font-medium text-destructive">错误信息</div>
+                    <div className="text-destructive">{historyDetail.error_message}</div>
+                    {historyDetail.error_trace ? (
+                      <pre className="mono max-h-[160px] overflow-y-auto whitespace-pre-wrap text-[11px] text-destructive/80">
+                        {historyDetail.error_trace}
+                      </pre>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">请选择一条记录查看详情</div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

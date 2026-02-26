@@ -55,6 +55,7 @@ data/index/
 # 六、Web 版 KB 运行数据（新增业务）
 # 上传原文、索引文件、manifest 等运行期数据
 data/kbs/
+data/history.db
 
 # 七、Web 前端构建产物（新增业务）
 # 依赖目录与打包产物不入库

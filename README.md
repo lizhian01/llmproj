@@ -36,6 +36,7 @@
 ### Web 应用（新增）
 - **TextLab**：文本输入/上传、卡片化结果展示、JSON/Markdown 双视图
 - **RAGLab**：KB 列表、上传、建库、问答、分数进度条、引用证据折叠展示
+- **历史记录**：TextLab/RAGLab 最近记录列表与详情查看（后端持久化，刷新不丢失）
 - 上传与索引统一落盘：`data/kbs/{kb_id}/...`
 
 ## 目录结构与功能
@@ -96,6 +97,12 @@ OPENAI_API_KEY=你的key
 OPENAI_TIMEOUT=60
 OPENAI_MAX_RETRIES=5
 OPENAI_PROXY=http://127.0.0.1:7890（7890替换为你的代理端口）
+```
+
+历史记录可选配置：
+```env
+HISTORY_MAX_RECORDS=100
+HISTORY_DB_PATH=data/history.db
 ```
 
 ### 2) 安装依赖
@@ -200,6 +207,65 @@ python 01_smoke_test.py
   "reason": "below_threshold"
 }
 ```
+
+## 历史记录（Web）
+- 存储：SQLite `data/history.db`（可用 `HISTORY_DB_PATH` 覆盖）
+- 默认保留最近 `HISTORY_MAX_RECORDS` 条（默认 100）
+- 清空：删除 `data/history.db` 或设置新的 `HISTORY_DB_PATH`
+
+### 历史记录接口
+列表：
+```http
+GET /api/text/history?limit=50
+GET /api/rag/history?limit=50
+```
+
+详情：
+```http
+GET /api/text/history/{id}
+GET /api/rag/history/{id}
+```
+
+TextLab 列表示例：
+```json
+{
+  "limit": 50,
+  "items": [
+    {
+      "id": "c0f9c6...",
+      "created_at": "2026-02-26T08:01:12Z",
+      "status": "success",
+      "input_preview": "……",
+      "summary_short": "……",
+      "duration_ms": 842
+    }
+  ]
+}
+```
+
+RAGLab 详情示例：
+```json
+{
+  "id": "a1d2b3...",
+  "created_at": "2026-02-26T08:05:10Z",
+  "status": "refused",
+  "kb_id": "kb_20260226_...",
+  "question": "……",
+  "answer": "……",
+  "refused": true,
+  "top_score": 0.12,
+  "threshold": 0.35,
+  "citations": [],
+  "reason": "below_threshold"
+}
+```
+
+### 本地验证（历史记录）
+1) 启动后端与前端（见 “启动 Web”）。
+2) 在 TextLab 或 RAGLab 发起一次请求。
+3) 刷新页面，查看“历史记录”列表是否保留。
+4) 清空历史：删除 `data/history.db` 或修改 `HISTORY_DB_PATH` 指向新文件。
+5) 设置保留条数：设置 `HISTORY_MAX_RECORDS`（如 50/100/200）。
 
 ## 评估（可选）
 文本处理评测：
