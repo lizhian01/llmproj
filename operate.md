@@ -1,33 +1,37 @@
-# 完整操作文档（operate.md）
-
+﻿# 完整操作文档（operate.md）
 本文档按“从零到可联调”的顺序说明 llmproj 的完整使用方法。
 
 ## 1. 目标与范围
 - 提供文本处理能力（摘要、分类、实体、改写）。
 - 提供本地知识库 RAG 能力（上传、建库、问答、拒答）。
 - 同时支持 CLI 与 Web（FastAPI + Vite React）。
+- 支持历史记录查看（TextLab / RAGLab）。
 
 ## 2. 前置条件
 - Python 3.9+
 - Node.js 18+
-- 能访问模型 API
-- 在项目根目录具备 `.env`
+- 可访问模型 API
+- 项目根目录具备 `.env`
 
 ## 3. 环境配置
 
 ### 3.1 配置 `.env`
 在项目根目录创建：
-
 ```env
 OPENAI_API_KEY=your_key
 ```
 
 可选：
-
 ```env
 OPENAI_TIMEOUT=60
 OPENAI_MAX_RETRIES=5
 OPENAI_PROXY=http://127.0.0.1:7890
+```
+
+历史记录可选配置：
+```env
+HISTORY_MAX_RECORDS=100
+HISTORY_DB_PATH=data/history.db
 ```
 
 ### 3.2 安装 Python 依赖
@@ -46,12 +50,11 @@ cd ..
 
 ### 4.1 启动后端（终端 A）
 必须在项目根目录执行：
-
 ```bash
 uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-说明：如果在 `web/` 目录执行，通常会出现 `No module named 'server'`。
+提示：若在 `web/` 目录启动，可能出现 `No module named 'server'`。
 
 ### 4.2 启动前端（终端 B）
 ```bash
@@ -70,24 +73,31 @@ npm run dev
 
 ## 5. Web 端操作流程
 
-## 5.1 TextLab
+### 5.1 TextLab
 1. 打开 `TextLab` 页面。
-2. 粘贴文本，或上传 `.txt/.md` 文件。
+2. 粘贴文本或上传 `.txt/.md` 文件。
 3. 点击“开始处理”。
 4. 查看右侧卡片结果。
-5. 在下方切换 `JSON` / `Markdown` Tab。
-6. 可使用“复制当前视图”按钮。
+5. 在下方切换 `JSON` / `Markdown` 视图。
+6. 使用“复制/下载”导出结果。
+7. 在“历史记录”区域查看最近生成记录与详情。
 
-## 5.2 RAGLab
+### 5.2 RAGLab
 1. 在 KB 管理区上传知识库文件。
 2. 选择目标 KB，点击“开始建库”。
-3. 在问答区输入问题，设置 `TopK` 与 `Threshold`。
+3. 在问答区输入问题并设置 `TopK` 与 `Threshold`。
 4. 点击“发起问答”。
-5. 查看：
-- `answer`
-- `refused` 状态
-- `top_score / threshold` 进度条
-- `citations` 折叠列表
+5. 查看以下信息：
+   - `answer`
+   - `refused` 状态
+   - `top_score / threshold` 进度条
+   - `citations` 折叠列表
+6. 在“历史记录”区域查看近期问答与检索详情。
+
+### 5.3 历史记录说明
+- 数据持久化存储在 `data/history.db`（SQLite）。
+- 默认保留最近 `HISTORY_MAX_RECORDS` 条。
+- 清空历史：删除 `data/history.db` 或设置新的 `HISTORY_DB_PATH`。
 
 ## 6. API 联调流程（推荐）
 
@@ -97,7 +107,6 @@ curl -X POST "http://localhost:8000/api/kb/upload" \
   -F "files=@data/kb/company_policy.md" \
   -F "kb_name=policy"
 ```
-
 记录返回的 `kb_id`。
 
 ### 6.2 建索引
@@ -111,7 +120,7 @@ curl -X POST "http://localhost:8000/api/rag/ask" \
   -H "Content-Type: application/json" \
   -d '{
     "kb_id":"<kb_id>",
-    "question":"udp特点是什么",
+    "question":"udp 特点是什么？",
     "topk":5,
     "threshold":0.35
   }'
@@ -122,6 +131,15 @@ curl -X POST "http://localhost:8000/api/rag/ask" \
 curl -X POST "http://localhost:8000/api/text/process" \
   -H "Content-Type: application/json" \
   -d '{"text":"在这里放待处理文本"}'
+```
+
+### 6.5 历史记录接口
+```bash
+curl "http://localhost:8000/api/text/history?limit=50"
+curl "http://localhost:8000/api/text/history/<id>"
+
+curl "http://localhost:8000/api/rag/history?limit=50"
+curl "http://localhost:8000/api/rag/history/<id>"
 ```
 
 ## 7. CLI 操作流程
@@ -141,7 +159,7 @@ python qa.py index --kb data/kb
 
 ### 7.3 RAG 问答
 ```bash
-python qa.py ask --question "udp特点是什么" --topk 5 --threshold 0.35
+python qa.py ask --question "udp 特点是什么" --topk 5 --threshold 0.35
 ```
 
 ## 8. 数据落盘说明
@@ -151,6 +169,7 @@ python qa.py ask --question "udp特点是什么" --topk 5 --threshold 0.35
 - 索引目录：`data/kbs/{kb_id}/index/`
 - chunk 文件：`data/kbs/{kb_id}/chunks.json`
 - 元信息：`data/kbs/manifest.json`
+- 历史记录：`data/history.db`
 
 ### 8.2 CLI 默认路径
 - 索引目录：`data/index/`
@@ -159,8 +178,9 @@ python qa.py ask --question "udp特点是什么" --topk 5 --threshold 0.35
 ## 9. 参数建议
 - `topk`：默认 `5`，可按知识库规模调整。
 - `threshold`：默认 `0.35`。
-- 若问答经常拒答，可先确认 `top_score`，再评估是否降低阈值。
-- 改动知识库文件或切分策略后，必须重建索引。
+- 如问答经常拒答，先查看 `top_score` 与 `threshold` 差距。
+- 修改知识库文件或切分策略后必须重建索引。
+- 历史记录条数可用 `HISTORY_MAX_RECORDS` 调整。
 
 ## 10. 常见问题排查
 
@@ -168,23 +188,27 @@ python qa.py ask --question "udp特点是什么" --topk 5 --threshold 0.35
 原因：后端在错误目录启动。
 解决：回到项目根目录执行 `uvicorn server.main:app ...`。
 
-### 10.2 RAG 返回“证据不足”
+### 10.2 RAG 返回“证据不足/拒答”
 排查顺序：
-1. 是否用对了 `kb_id`。
-2. 上传后是否重新建索引。
-3. 返回中 `reason` 是否为 `below_threshold`。
-4. 查看 `top_score` 与 `threshold` 差距。
+1. 是否使用正确 `kb_id`。
+2. 上传后是否重建索引。
+3. 返回 `reason` 是否为 `below_threshold`。
+4. 检查 `top_score` 与 `threshold` 差距。
 
 ### 10.3 前端请求失败
 - 后端是否启动在 `http://localhost:8000`。
 - 前端是否指向正确 `VITE_API_BASE`。
-- 浏览器控制台是否有跨域或 4xx/5xx 报错。
+- 控制台是否有跨域或 4xx/5xx 错误。
 
 ### 10.4 上传成功但无法建库
 - 确认上传的是 `.txt/.md`。
-- 检查 `data/kbs/{kb_id}/raw/` 是否有文件。
+- 检查 `data/kbs/{kb_id}/raw/` 是否存在文件。
+
+### 10.5 历史记录为空
+- 检查是否有成功请求。
+- 确认 `HISTORY_DB_PATH` 指向的数据库文件存在。
 
 ## 11. 日常维护建议
 - 先改 `app/` 算法，再在 `server/services/` 封装业务，再补前端交互。
-- 每次改 API 字段，请同步更新 `README.md`、`operate.md`。
+- 每次改 API 字段时同步更新 `README.md` 与 `operate.md`。
 - 定期清理 `data/kbs/` 旧索引，避免无效占用。
