@@ -1,7 +1,8 @@
 ﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from server.api.routers import kb, rag, text
+from config import load_env
+from server.api.routers import auth, kb, rag, text
 
 
 ALLOWED_ORIGINS = [
@@ -11,6 +12,7 @@ ALLOWED_ORIGINS = [
 
 
 def create_app() -> FastAPI:
+    load_env()
     app = FastAPI(title="LLM + RAG Web API", version="1.0.0")
 
     app.add_middleware(
@@ -21,6 +23,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(auth.router)
     app.include_router(text.router)
     app.include_router(kb.router)
     app.include_router(rag.router)

@@ -1,14 +1,14 @@
-﻿from pathlib import Path
+﻿from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import HTTPException
 
-from datetime import datetime, timezone
-
 from app.rag import build_index, generate_answer, load_index, load_kb_files, retrieve, should_refuse
+from server.services.external_errors import raise_external_error
 from server.services.kb_store import get_kb_dir, get_kb_index_paths
-from server.services.manifest import ensure_manifest, find_kb, save_manifest
 from server.services.paths import BASE_DIR
+from server.services.user_store import get_kb_detail, set_kb_index
 
 
 def _relative_to_base(path: Path) -> str:
@@ -23,45 +23,47 @@ def _now_iso() -> str:
 
 
 def build_index_for_kb(
+    *,
+    user_id: str,
     kb_id: str,
     embedding_model: str = "text-embedding-3-small",
     max_len: int = 800,
     overlap: int = 120,
     batch_size: int = 16,
 ) -> Dict:
-    kb_dir = get_kb_dir(kb_id)
+    kb = get_kb_detail(user_id, kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="KB not found")
+
+    kb_dir = get_kb_dir(user_id, kb_id)
     if not kb_dir.exists():
         raise HTTPException(status_code=404, detail="KB not found")
 
     if not load_kb_files(str(kb_dir)):
         raise HTTPException(status_code=400, detail="KB has no valid files")
 
-    index_dir, chunks_path = get_kb_index_paths(kb_id)
-    stats = build_index(
-        kb_dir=str(kb_dir),
-        index_dir=str(index_dir),
-        chunks_path=str(chunks_path),
-        embedding_model=embedding_model,
-        max_len=max_len,
-        overlap=overlap,
-        batch_size=batch_size,
+    index_dir, chunks_path = get_kb_index_paths(user_id, kb_id)
+    try:
+        stats = build_index(
+            kb_dir=str(kb_dir),
+            index_dir=str(index_dir),
+            chunks_path=str(chunks_path),
+            embedding_model=embedding_model,
+            max_len=max_len,
+            overlap=overlap,
+            batch_size=batch_size,
+        )
+    except Exception as exc:
+        raise_external_error(exc, action="index build")
+
+    set_kb_index(
+        user_id,
+        kb_id,
+        built=True,
+        chunks=stats.get("chunks"),
+        index_dir=_relative_to_base(index_dir),
+        chunks_path=_relative_to_base(chunks_path),
     )
-
-    manifest = ensure_manifest()
-    kb = find_kb(manifest, kb_id)
-    if kb is None:
-        kb = {"kb_id": kb_id, "name": kb_id, "files": []}
-        manifest.setdefault("kbs", []).append(kb)
-
-    kb["updated_at"] = _now_iso()
-    kb["index"] = {
-        "built": True,
-        "chunks": stats.get("chunks"),
-        "index_dir": _relative_to_base(index_dir),
-        "chunks_path": _relative_to_base(chunks_path),
-        "updated_at": _now_iso(),
-    }
-    save_manifest(manifest)
 
     return stats
 
@@ -70,16 +72,20 @@ def _format_citations(retrieved, preview_len: int = 80) -> List[Dict]:
     citations: List[Dict] = []
     for r in retrieved:
         preview = r.chunk.text.replace("\n", " ").strip()[:preview_len]
-        citations.append({
-            "source_file": r.chunk.source_file,
-            "chunk_id": r.chunk.chunk_id,
-            "chunk_preview": preview,
-            "score": r.score,
-        })
+        citations.append(
+            {
+                "source_file": r.chunk.source_file,
+                "chunk_id": r.chunk.chunk_id,
+                "chunk_preview": preview,
+                "score": r.score,
+            }
+        )
     return citations
 
 
 def ask_kb(
+    *,
+    user_id: str,
     kb_id: str,
     question: str,
     topk: int = 5,
@@ -87,7 +93,10 @@ def ask_kb(
     embedding_model: str = "text-embedding-3-small",
     model: str = "gpt-4o-mini",
 ) -> Dict:
-    index_dir, chunks_path = get_kb_index_paths(kb_id)
+    if not get_kb_detail(user_id, kb_id):
+        raise HTTPException(status_code=404, detail="KB not found")
+
+    index_dir, chunks_path = get_kb_index_paths(user_id, kb_id)
 
     if not chunks_path.exists() or not index_dir.exists():
         raise HTTPException(status_code=404, detail="Index not found")
@@ -97,13 +106,16 @@ def ask_kb(
         chunks_path=str(chunks_path),
     )
 
-    retrieved = retrieve(
-        question=question,
-        chunks=chunks,
-        embeddings=embeddings,
-        topk=topk,
-        embedding_model=embedding_model,
-    )
+    try:
+        retrieved = retrieve(
+            question=question,
+            chunks=chunks,
+            embeddings=embeddings,
+            topk=topk,
+            embedding_model=embedding_model,
+        )
+    except Exception as exc:
+        raise_external_error(exc, action="retrieval")
 
     top_score: Optional[float] = retrieved[0].score if retrieved else None
 
@@ -129,11 +141,14 @@ def ask_kb(
             "reason": "below_threshold",
         }
 
-    answer = generate_answer(
-        question=question,
-        retrieved=retrieved,
-        model=model,
-    )
+    try:
+        answer = generate_answer(
+            question=question,
+            retrieved=retrieved,
+            model=model,
+        )
+    except Exception as exc:
+        raise_external_error(exc, action="answer generation")
 
     return {
         "question": question,

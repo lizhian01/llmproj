@@ -1,10 +1,11 @@
-from time import perf_counter
+﻿from time import perf_counter
 import traceback
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field
 
 from app.pipeline import process_text
+from server.api.deps import get_current_user
 from server.services.external_errors import raise_external_error
 from server.services.history_store import (
     get_text_history,
@@ -21,7 +22,7 @@ class TextProcessRequest(BaseModel):
 
 
 @router.post("/process")
-def process(req: TextProcessRequest) -> dict:
+def process(req: TextProcessRequest, user: dict = Depends(get_current_user)) -> dict:
     start = perf_counter()
     try:
         result = process_text(req.text)
@@ -29,6 +30,7 @@ def process(req: TextProcessRequest) -> dict:
         duration_ms = int((perf_counter() - start) * 1000)
         try:
             record_text_history(
+                user_id=user["id"],
                 input_text=req.text,
                 result=None,
                 status="error",
@@ -42,6 +44,7 @@ def process(req: TextProcessRequest) -> dict:
     duration_ms = int((perf_counter() - start) * 1000)
     try:
         record_text_history(
+            user_id=user["id"],
             input_text=req.text,
             result=result,
             status="success",
@@ -53,15 +56,15 @@ def process(req: TextProcessRequest) -> dict:
 
 
 @router.get("/history")
-def list_history(limit: int = 50) -> dict:
+def list_history(limit: int = 50, user: dict = Depends(get_current_user)) -> dict:
     safe_limit = normalize_limit(limit)
-    items = list_text_history(safe_limit)
+    items = list_text_history(user["id"], safe_limit)
     return {"items": items, "limit": safe_limit}
 
 
 @router.get("/history/{history_id}")
-def history_detail(history_id: str) -> dict:
-    item = get_text_history(history_id)
+def history_detail(history_id: str, user: dict = Depends(get_current_user)) -> dict:
+    item = get_text_history(user["id"], history_id)
     if not item:
         raise HTTPException(status_code=404, detail="History record not found")
     return item
