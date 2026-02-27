@@ -28,11 +28,15 @@ OPENAI_MAX_RETRIES=5
 OPENAI_PROXY=http://127.0.0.1:7890
 ```
 
-历史记录可选配置：
+认证与数据库配置（Web 必需）：
 ```env
-HISTORY_MAX_RECORDS=100
-HISTORY_DB_PATH=data/history.db
+JWT_SECRET=your-secret（必需项）
+JWT_EXPIRES_DAYS=7
+DB_PATH=data/app.db
+HISTORY_LIMIT=100
+AUTH_ALLOW_GUEST=false
 ```
+可参考 `.env.example`。
 
 ### 3.2 安装 Python 依赖
 ```bash
@@ -73,6 +77,11 @@ npm run dev
 
 ## 5. Web 端操作流程
 
+### 5.0 登录与账户
+1. 首次访问 `http://localhost:5173` 进入登录页。
+2. 使用“注册”创建账号或使用已有账号登录。
+3. 登录后可在“账户设置”页面查看信息并执行删除操作。
+
 ### 5.1 TextLab
 1. 打开 `TextLab` 页面。
 2. 粘贴文本或上传 `.txt/.md` 文件。
@@ -95,15 +104,29 @@ npm run dev
 6. 在“历史记录”区域查看近期问答与检索详情。
 
 ### 5.3 历史记录说明
-- 数据持久化存储在 `data/history.db`（SQLite）。
-- 默认保留最近 `HISTORY_MAX_RECORDS` 条。
-- 清空历史：删除 `data/history.db` 或设置新的 `HISTORY_DB_PATH`。
+- 数据持久化存储在 `data/app.db`（SQLite）。
+- 默认保留最近 `HISTORY_LIMIT` 条。
+- 按用户隔离存储，需登录后访问。
+- 清空历史：删除 `data/app.db` 或设置新的 `DB_PATH`。
 
 ## 6. API 联调流程（推荐）
+
+### 6.0 注册/登录获取 Token
+```bash
+curl -X POST "http://localhost:8000/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"pass1234"}'
+
+curl -X POST "http://localhost:8000/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"demo","password":"pass1234"}'
+```
+从响应中取出 `token`，后续请求需带 `Authorization: Bearer <token>`。
 
 ### 6.1 上传 KB
 ```bash
 curl -X POST "http://localhost:8000/api/kb/upload" \
+  -H "Authorization: Bearer <token>" \
   -F "files=@data/kb/company_policy.md" \
   -F "kb_name=policy"
 ```
@@ -111,12 +134,14 @@ curl -X POST "http://localhost:8000/api/kb/upload" \
 
 ### 6.2 建索引
 ```bash
-curl -X POST "http://localhost:8000/api/kb/<kb_id>/index"
+curl -X POST "http://localhost:8000/api/kb/<kb_id>/index" \
+  -H "Authorization: Bearer <token>"
 ```
 
 ### 6.3 发起问答
 ```bash
 curl -X POST "http://localhost:8000/api/rag/ask" \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{
     "kb_id":"<kb_id>",
@@ -129,17 +154,18 @@ curl -X POST "http://localhost:8000/api/rag/ask" \
 ### 6.4 文本处理
 ```bash
 curl -X POST "http://localhost:8000/api/text/process" \
+  -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"text":"在这里放待处理文本"}'
 ```
 
 ### 6.5 历史记录接口
 ```bash
-curl "http://localhost:8000/api/text/history?limit=50"
-curl "http://localhost:8000/api/text/history/<id>"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/text/history?limit=50"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/text/history/<id>"
 
-curl "http://localhost:8000/api/rag/history?limit=50"
-curl "http://localhost:8000/api/rag/history/<id>"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/rag/history?limit=50"
+curl -H "Authorization: Bearer <token>" "http://localhost:8000/api/rag/history/<id>"
 ```
 
 ## 7. CLI 操作流程
@@ -165,11 +191,11 @@ python qa.py ask --question "udp 特点是什么" --topk 5 --threshold 0.35
 ## 8. 数据落盘说明
 
 ### 8.1 Web 模式（多 KB）
-- 上传原文：`data/kbs/{kb_id}/raw/`
-- 索引目录：`data/kbs/{kb_id}/index/`
-- chunk 文件：`data/kbs/{kb_id}/chunks.json`
-- 元信息：`data/kbs/manifest.json`
-- 历史记录：`data/history.db`
+- 上传原文：`data/kbs/{user_id}/{kb_id}/raw/`
+- 索引目录：`data/kbs/{user_id}/{kb_id}/index/`
+- chunk 文件：`data/kbs/{user_id}/{kb_id}/chunks.json`
+- 元信息：`data/kbs/manifest.json`（旧版遗留）
+- 账号/历史记录：`data/app.db`
 
 ### 8.2 CLI 默认路径
 - 索引目录：`data/index/`
@@ -180,7 +206,7 @@ python qa.py ask --question "udp 特点是什么" --topk 5 --threshold 0.35
 - `threshold`：默认 `0.35`。
 - 如问答经常拒答，先查看 `top_score` 与 `threshold` 差距。
 - 修改知识库文件或切分策略后必须重建索引。
-- 历史记录条数可用 `HISTORY_MAX_RECORDS` 调整。
+- 历史记录条数可用 `HISTORY_LIMIT` 调整。
 
 ## 10. 常见问题排查
 
@@ -206,7 +232,15 @@ python qa.py ask --question "udp 特点是什么" --topk 5 --threshold 0.35
 
 ### 10.5 历史记录为空
 - 检查是否有成功请求。
-- 确认 `HISTORY_DB_PATH` 指向的数据库文件存在。
+- 确认 `DB_PATH` 指向的数据库文件存在。
+
+### 10.6 JWT secret not configured
+- 未设置 `JWT_SECRET`，导致登录/注册失败。
+- 在 `.env` 中设置并重启后端。
+
+### 10.7 401 Unauthorized
+- 未携带 `Authorization: Bearer <token>`。
+- token 已过期或被清除（重新登录获取新 token）。
 
 ## 11. 日常维护建议
 - 先改 `app/` 算法，再在 `server/services/` 封装业务，再补前端交互。

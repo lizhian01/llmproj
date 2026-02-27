@@ -1,6 +1,6 @@
 ﻿# 基于大语言模型的文本处理辅助系统
 
-> 面向中文文本的轻量级处理工具。以“快速、直观、可复现”为目标，从输入文本到结构化结果提供一条完整可运行的工程链路。
+> 面向中文文本的轻量级处理与知识库问答工具。以“快速、直观、可复现、可扩展”为目标，提供 TextLab（文本处理/生成） 与 RagLab（基于知识库的 RAG 问答） 两条能力主线：用户在 Web 端（或CLI均可）输入文本或问题，系统在后端完成模型调用、检索增强与证据组织，输出结构化结果与可追溯引用；同时支持 JWT 登录鉴权与多用户隔离，确保不同账号的历史记录与知识库相互独立，便于作为通用 AI 能力服务接入业务系统。
 
 ## 简介
 本项目包含两条主线能力：
@@ -16,7 +16,7 @@
 - Node.js 18+
 - 依赖（后端）：`openai`、`python-dotenv`、`fastapi`、`uvicorn`、`python-multipart`
 - 依赖（前端）：`react`、`vite`、`tailwindcss`、`@radix-ui/*`、`sonner` 等（见 `web/package.json`）
-- 需要在 `.env` 中配置 `OPENAI_API_KEY`
+- 需要在 `.env` 中配置 `OPENAI_API_KEY` 与 `JWT_SECRET`（Web 登录必需）
 
 ## 功能概览
 ### 文本处理
@@ -37,7 +37,7 @@
 - **TextLab**：文本输入/上传、卡片化结果展示、JSON/Markdown 双视图
 - **RAGLab**：KB 列表、上传、建库、问答、分数进度条、引用证据折叠展示
 - **历史记录**：TextLab/RAGLab 最近记录列表与详情查看（后端持久化，刷新不丢失）
-- 上传与索引统一落盘：`data/kbs/{kb_id}/...`
+- 上传与索引统一落盘：`data/kbs/{user_id}/{kb_id}/...`
 
 ## 目录结构与功能
 ```
@@ -47,11 +47,11 @@
 │  ├─ prompt_loader.py  # prompt 读取/渲染
 │  ├─ rag.py            # RAG 逻辑（切分/索引/检索/回答）
 │  └─ schemas.py        # 数据结构定义
-├─ server/              # FastAPI 后端（新增）
+├─ server/              # FastAPI 后端
 │  ├─ main.py           # 应用入口、CORS、路由注册
 │  ├─ api/routers/      # text/kb/rag 路由
 │  └─ services/         # manifest、kb 存储、rag 服务封装
-├─ web/                 # 前端工作台（新增）
+├─ web/                 # 前端工作台
 │  ├─ src/routes/       # TextLab / RAGLab 页面
 │  ├─ src/components/ui # shadcn 风格组件
 │  └─ package.json      # 前端依赖与脚本
@@ -61,8 +61,8 @@
 ├─ data/                # 示例数据与输出
 │  ├─ sample.txt
 │  ├─ kb/               # CLI 示例 KB
-│  └─ kbs/              # Web KB 数据（新增）
-├─ examples/            # 参考脚本（扩展/学习用）
+│  └─ kbs/              # Web KB 数据
+├─ examples/            # 参考脚本
 ├─ run.py               # 主入口：处理文本并输出结果
 ├─ eval.py              # 简易评测脚本（基于 tests.jsonl）
 ├─ qa.py                # 本地知识库问答（RAG）入口
@@ -87,7 +87,7 @@
 
 ## 快速开始（从零到可运行）
 ### 1) 配置环境变量
-在项目根目录创建/修改 `.env`：
+在项目根目录创建/修改 `.env`（可参考 `.env.example`）：
 ```env
 OPENAI_API_KEY=你的key
 ```
@@ -99,11 +99,15 @@ OPENAI_MAX_RETRIES=5
 OPENAI_PROXY=http://127.0.0.1:7890（7890替换为你的代理端口）
 ```
 
-历史记录可选配置：
+认证与数据库配置（Web 必需）：
 ```env
-HISTORY_MAX_RECORDS=100
-HISTORY_DB_PATH=data/history.db
+JWT_SECRET=your-secret
+JWT_EXPIRES_DAYS=7
+DB_PATH=data/app.db
+HISTORY_LIMIT=100
+AUTH_ALLOW_GUEST=false
 ```
+
 
 ### 2) 安装依赖
 后端依赖：
@@ -144,7 +148,7 @@ python qa.py index --kb data/kb
 python qa.py ask --question "产品 Alpha 正式发布日期是什么时候？" --topk 5 --threshold 0.35
 ```
 
-### 5) 启动 Web（新增）
+### 5) 启动 Web
 后端（必须在项目根目录运行）：
 ```bash
 uvicorn server.main:app --reload --host 0.0.0.0 --port 8000
@@ -158,10 +162,19 @@ npm run dev
 
 浏览器访问：`http://localhost:5173`
 
+首次访问请在登录页注册/登录。
+
 ### 6) API 连通性测试（可选）
 ```bash
 python 01_smoke_test.py
 ```
+
+## 鉴权与账号（Web）
+- 注册：`POST /api/auth/register`
+- 登录：`POST /api/auth/login`
+- 业务接口需携带：`Authorization: Bearer <token>`
+- 账户信息：`GET /api/auth/me`
+- 删除账户：`DELETE /api/auth/me`
 
 ## 输出示例（文本处理）
 ```json
@@ -209,9 +222,10 @@ python 01_smoke_test.py
 ```
 
 ## 历史记录（Web）
-- 存储：SQLite `data/history.db`（可用 `HISTORY_DB_PATH` 覆盖）
-- 默认保留最近 `HISTORY_MAX_RECORDS` 条（默认 100）
-- 清空：删除 `data/history.db` 或设置新的 `HISTORY_DB_PATH`
+- 存储：SQLite `data/app.db`（可用 `DB_PATH` 覆盖）
+- 默认保留最近 `HISTORY_LIMIT` 条（默认 100）
+- 按用户隔离存储，需登录后访问
+- 清空：删除 `data/app.db` 或设置新的 `DB_PATH`
 
 ### 历史记录接口
 列表：
@@ -264,8 +278,8 @@ RAGLab 详情示例：
 1) 启动后端与前端（见 “启动 Web”）。
 2) 在 TextLab 或 RAGLab 发起一次请求。
 3) 刷新页面，查看“历史记录”列表是否保留。
-4) 清空历史：删除 `data/history.db` 或修改 `HISTORY_DB_PATH` 指向新文件。
-5) 设置保留条数：设置 `HISTORY_MAX_RECORDS`（如 50/100/200）。
+4) 清空历史：删除 `data/history.db` 或修改 `DB_PATH` 指向新文件。
+5) 设置保留条数：设置 `HISTORY_LIMIT`（如 50/100/200）。
 
 ## 评估（可选）
 文本处理评测：
@@ -303,7 +317,18 @@ python eval_qa.py --kb data/kb
 - `filefunc.md`：文件功能说明
 
 ## 可选扩展
+- 可接入医疗医疗文献，病例文本，医学指南等知识库信息，实现医疗问答系统（RAG主线）。
 - 增加 `data/tests.jsonl` 的样例集，扩展评测维度（比如关键词命中率）。
 - 增加命令行参数（如模型选择、摘要长度、是否生成报告）。
 - 增加日志与重试策略说明，提升工程稳定性。
 - 增加 API 鉴权、用户隔离与审计日志。
+
+
+
+
+
+
+
+
+
+
